@@ -5,18 +5,25 @@ def load_and_clean_data(config):
     Loads and cleans respondent data based on a configuration dictionary.
     
     Args:
-        config (dict): A dictionary containing 'file_path' and 'complete_action'.
+        config (dict): A dictionary containing 'file_path', 'complete_action',
+                       and 'filter_pauses'.
     """
     try:
-        # Get the file path from the configuration
         file_path = config['file_path']
         df = pd.read_csv(file_path)
 
         # --- Data Cleaning ---
         df['Action'] = df['Action'].astype(str)
-        pause_actions = df[df['Action'].str.contains('pause', case=False, na=False)]
-        assignments_with_pause = pause_actions["Assignment"].unique()
-        df = df[~df["Assignment"].isin(assignments_with_pause)]
+        
+        # --- MODIFIED PAUSE FILTER ---
+        # Check if the 'filter_pauses' key is set to True
+        if config.get('filter_pauses', True):
+            print("Cleaning: Filtering out assignments with pauses...")
+            pause_actions = df[df['Action'].str.contains('pause', case=False, na=False)]
+            assignments_with_pause = pause_actions["Assignment"].unique()
+            df = df[~df["Assignment"].isin(assignments_with_pause)]
+        else:
+            print("Cleaning: Including all assignments (with and without pauses)...")
 
         # Get the unique completion action from the configuration
         complete_action = config['complete_action']
@@ -29,10 +36,12 @@ def load_and_clean_data(config):
         df['datetime'] = pd.to_datetime(df['Date'] + ' ' + df['Time'], errors='coerce')
         df.dropna(subset=['datetime'], inplace=True)
 
+        # This calculation remains the same.
+        # For "with-pause" data, this 'duration' will be the total elapsed time.
         time_per_respondent = df.groupby('Assignment')['datetime'].agg(['min', 'max'])
         time_per_respondent['duration'] = time_per_respondent['max'] - time_per_respondent['min']
 
-        time_limit_max = pd.Timedelta(hours=10)
+        time_limit_max = pd.Timedelta(minutes=600)
         time_limit_min = pd.Timedelta(minutes=1)
         time_filtered_df = time_per_respondent[(time_per_respondent['duration'] < time_limit_max) & (time_per_respondent["duration"] > time_limit_min)]
         time_filtered_df.reset_index(inplace=True)

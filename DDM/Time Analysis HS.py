@@ -66,7 +66,7 @@ try:
     time_per_respondent = df.groupby('Assignment')['datetime'].agg(['min', 'max'])
     time_per_respondent['duration'] = time_per_respondent['max'] - time_per_respondent['min']
 
-    time_limit_max = pd.Timedelta(hours=24)
+    time_limit_max = pd.Timedelta(hours=10)
     time_limit_min = pd.Timedelta(minutes=1)
     time_per_respondent_under_24 = time_per_respondent[(time_per_respondent['duration'] < time_limit_max) & (time_per_respondent["duration"] > time_limit_min)]
 
