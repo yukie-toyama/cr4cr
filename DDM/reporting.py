@@ -32,7 +32,7 @@ def create_table_image(main_df, time_filtered_df, analysis_name):
         the_table = ax.table(cellText=df_reset.values, colLabels=df_reset.columns, loc='center', cellLoc='center')
         the_table.auto_set_font_size(False)
         the_table.set_fontsize(10)
-        the_table.scale(1.2, 1.2)
+        the_table.scale(1.5, 1.5)
         
         output_filename = f'summary_table_{analysis_name}.png'
         plt.savefig(output_filename, bbox_inches='tight', dpi=150)
