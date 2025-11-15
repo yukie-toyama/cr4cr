@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import re
 import textwrap
+import sys
 
 # --- Configuration (Using XLSX files and sheet names) ---
 HS_EXCEL_FILE = 'Spring 2025 DDM HS Administration answers.xlsx'
@@ -141,7 +142,6 @@ def summarize_variable(df, varlist_df, var_name):
         print(summary_table.to_string())
         print(f"Total respondents (N) = {counts.sum()}")
 
-# --- THIS FUNCTION IS MODIFIED ---
 def plot_stem_perception(df, stem_vars_map, school_level):
     """
     Generates and saves the stacked bar chart for STEM perception
@@ -177,15 +177,12 @@ def plot_stem_perception(df, stem_vars_map, school_level):
         kind='barh', 
         stacked=True, 
         figsize=(12, 6),
-        colormap='Blues_r',  # <-- THIS LINE IS CHANGED
+        colormap='Blues_r',
         title=f'STEM Perceptions ({school_level})'
     )
     
-    # Add percentage labels inside bars
     for container in ax.containers:
-        # Only show label if the percentage is > 5% to avoid clutter
         labels = [f'{v:.1f}%' if v > 5 else '' for v in container.datavalues]
-        
         ax.bar_label(
             container,
             labels=labels,
@@ -204,6 +201,33 @@ def plot_stem_perception(df, stem_vars_map, school_level):
     plt.savefig(output_filename, bbox_inches='tight')
     plt.close()
     print(f"STEM perception plot saved as '{output_filename}'")
+
+# --- *** NEW FUNCTION *** ---
+def summarize_activities(df, total_unique_students):
+    """
+    Generates and prints a summary table of unique students per activity.
+    """
+    print("\n" + "="*50)
+    print("Summary of Students per Assessment Activity")
+    print("="*50)
+    
+    # Get the count of unique students for each activity
+    activity_counts = df.groupby('Activities')['Student'].nunique().sort_values(ascending=False)
+    
+    # Calculate percentages based on the total *unique* student body
+    activity_percentages = (activity_counts / total_unique_students) * 100
+    
+    # Create a summary table
+    summary_table = pd.DataFrame({
+        'Count of Unique Students': activity_counts,
+        'Percentage of Total Students': activity_percentages
+    })
+    
+    # Format and print
+    summary_table['Percentage of Total Students'] = summary_table['Percentage of Total Students'].map('{:,.2f}%'.format)
+    print(summary_table.to_string())
+    print(f"\nNote: Percentages are based on the total unique student body (N={total_unique_students}).")
+    print("The sum of counts may exceed N as students can take multiple activities.")
 
 # --- Main Analysis ---
 
@@ -224,13 +248,18 @@ def run_hs_analysis(excel_file, data_sheet, varlist_sheet):
     
     # Create a DataFrame unique by Student ID
     df_unique_students = df.drop_duplicates(subset=['Student'])
+    total_students_hs = len(df_unique_students) # Get the total unique count
+    
+    # --- *** NEW: Run Activity Summary *** ---
+    # We use the *original* df here to get all activities
+    summarize_activities(df, total_students_hs)
     
     # --- Run Overall Summary (using the unique student df) ---
-    print(f"\n--- OVERALL HS SUMMARY (N={len(df_unique_students)}) ---")
+    print(f"\n--- OVERALL HS SUMMARY (N={total_students_hs}) ---")
     for var in HS_DEMOGRAPHIC_VARS:
         summarize_variable(df_unique_students, varlist_df, var)
         
-    # --- Run By Course Summary (using the original df) ---
+    # --- Run By AP Course Summary (using the original df) ---
     print("\n" + "#" * 70)
     print("# HIGH SCHOOL SUMMARY (BY AP COURSE)")
     print("#" * 70)
@@ -263,6 +292,26 @@ def run_hs_analysis(excel_file, data_sheet, varlist_sheet):
     else:
         print("--- WARNING: Could not parse AP Course keys. Skipping 'By Course' summary. ---")
 
+    # --- Run By CR4CR Course Summary ---
+    print("\n" + "#" * 70)
+    print("# HIGH SCHOOL SUMMARY (BY CR4CR COURSE)")
+    print("#" * 70)
+
+    df['Class'] = df['Class'].astype(str)
+    
+    cr4cr_df = df[df['Class'].str.contains("CR4CR", case=False, na=False)]
+    cr4cr_df_unique = cr4cr_df.drop_duplicates(subset=['Student'])
+    
+    print("\n" + "*" * 70)
+    print(f"SUMMARY FOR STUDENTS IN CR4CR (N={len(cr4cr_df_unique)})")
+    print("*" * 70)
+    
+    if len(cr4cr_df_unique) < 10:
+        print("--- No CR4CR students found or too few respondents ---")
+    else:
+        for var in course_demo_vars:
+            summarize_variable(cr4cr_df_unique, varlist_df, var)
+
     # --- Generate HS STEM Plot (using the unique student df) ---
     plot_stem_perception(df_unique_students, HS_STEM_VARS, 'HS')
 
@@ -283,9 +332,14 @@ def run_ms_analysis(excel_file, data_sheet, varlist_sheet):
     
     # Create a DataFrame unique by Student ID
     df_unique_students = df.drop_duplicates(subset=['Student'])
+    total_students_ms = len(df_unique_students) # Get the total unique count
 
+    # --- *** NEW: Run Activity Summary *** ---
+    # We use the *original* df here to get all activities
+    summarize_activities(df, total_students_ms)
+    
     # --- Run Overall Summary (using the unique student df) ---
-    print(f"\n--- (N={len(df_unique_students)}) ---")
+    print(f"\n--- (N={total_students_ms}) ---")
     for var in MS_DEMOGRAPHIC_VARS:
         summarize_variable(df_unique_students, varlist_df, var)
         
@@ -295,13 +349,27 @@ def run_ms_analysis(excel_file, data_sheet, varlist_sheet):
 # --- Main execution ---
 if __name__ == "__main__":
     
-    # Run High School Analysis
-    run_hs_analysis(HS_EXCEL_FILE, HS_DATA_SHEET, HS_VARLIST_SHEET)
+    output_filename = 'demographic_summary.txt'
     
-    # Run Middle School Analysis
-    run_ms_analysis(MS_EXCEL_FILE, MS_DATA_SHEET, MS_VARLIST_SHEET)
+    print(f"Starting demographic analysis... All text output will be saved to {output_filename}")
+
+    with open(output_filename, 'w', encoding='utf-8') as f:
+        sys.stdout = f  # Redirect all print() statements to the file 'f'
+
+        # Run High School Analysis
+        run_hs_analysis(HS_EXCEL_FILE, HS_DATA_SHEET, HS_VARLIST_SHEET)
+        
+        # Run Middle School Analysis
+        run_ms_analysis(MS_EXCEL_FILE, MS_DATA_SHEET, MS_VARLIST_SHEET)
+        
+        print("\n" + "="*70)
+        print("Demographic analysis complete.")
+        print(f"Output tables are saved in {output_filename}.")
+        print("PNG plots have been saved to the folder.")
+        print("="*70)
+
+    # Reset stdout back to the console
+    sys.stdout = sys.__stdout__  
     
-    print("\n" + "="*70)
-    print("Demographic analysis complete.")
-    print("Output tables are above. PNG plots have been saved to the folder.")
-    print("="*70)
+    print(f"Successfully saved summary tables to {output_filename}")
+    print("Graph PNG files have also been saved to the folder.")
